@@ -1,13 +1,15 @@
 from django.core.validators import URLValidator
 from django.http import JsonResponse
 from requests import get
+from rest_framework import filters
 from rest_framework.exceptions import ValidationError
+from rest_framework.generics import ListAPIView
 from rest_framework.views import APIView
 
 from yaml import Loader, load as load_yaml
 
-from backend.models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter
-
+from .models import (Shop, Category, Product, ProductInfo, Parameter, ProductParameter)
+from .serializers import ProductInfoSerializer
 
 
 class UploadProductsView(APIView):
@@ -77,3 +79,11 @@ class UploadProductsView(APIView):
                     return JsonResponse({'Error': f'KeyError: {str(er)}'}, status=400)
 
         return JsonResponse({'Error': 'You should provide a URL'}, status=400)
+
+
+class ListProductView(ListAPIView):
+    queryset = ProductInfo.objects.select_related('product').all()
+    serializer_class = ProductInfoSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['model', 'product__name', 'shop__name', 'product__category__name']
+    ordering_fields = ['model', 'product__name', 'shop__name', 'product__category__name', 'price_rrc', 'quantity']
