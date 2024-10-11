@@ -21,3 +21,24 @@ class ProductInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductInfo
         fields = ['model', 'quantity', 'price_rrc', 'shop', 'product']
+
+
+class AddProductSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+    class Meta:
+        model = Product
+        fields = ['id']
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product = AddProductSerializer(read_only=False)
+    class Meta:
+        model = OrderItem
+        fields = ['order','product', 'quantity', 'shop']
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    order_items = OrderItemSerializer(many=True, source='orderitem_set')
+    class Meta:
+        model = Order
+        fields = ['contact', 'order_items']

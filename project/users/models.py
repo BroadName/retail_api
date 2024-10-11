@@ -44,3 +44,26 @@ class CustomUser(BaseUser):
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Список пользователей'
         ordering = ('email',)
+
+
+class Contact(models.Model):
+    user = models.ForeignKey(CustomUser,
+                             on_delete=models.CASCADE,
+                             related_name='contacts',
+                             verbose_name='Пользователь')
+    city = models.CharField(max_length=50, verbose_name='Город')
+    street = models.CharField(max_length=100, verbose_name='Улица')
+    house = models.CharField(max_length=20, verbose_name='Дом', blank=True)
+    structure = models.CharField(max_length=20, verbose_name='Корпус', blank=True)
+    building = models.CharField(max_length=20, verbose_name='Строение', blank=True)
+    apartment = models.CharField(max_length=20, verbose_name='Квартира', blank=True)
+    phone = models.CharField(max_length=20, verbose_name='Телефон')
+    additional_desc = models.TextField(verbose_name='Дополнительная информация', blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Контактная информация'
+        verbose_name_plural = 'Список контактной информации'
+        ordering = ('-city',)
+
+    def __str__(self):
+        return f'{self.city}, {self.street}, {self.house}'
