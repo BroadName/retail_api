@@ -1,12 +1,14 @@
 from django.conf import settings
+from django.core.mail import EmailMessage
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.filters import SearchFilter
 from rest_framework.generics import CreateAPIView, UpdateAPIView, ListAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-from .models import CustomUser, Contact
+from .models import CustomUser, Contact, ConfirmToken
 from .serializers import (CreateCustomUserSerializer, CreateContactSerializer, UpdateCustomUserSerializer,
                           GetContactSerializer)
 
@@ -22,6 +24,17 @@ class CustomUserViewSet(CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = CustomUser.objects.create_user(**serializer.validated_data)
+        token = ConfirmToken.objects.create(user=user)
+
+        link = f'http://127.0.0.1:8000/api/v1/confirm_email/{token.token}/{user.email}'
+        body = f"""
+                Please confirm your email by clicking on the link:
+                <a href="{link}">Confirm your email</a>
+                """
+        msg = EmailMessage('Registration on retail site',
+                           body, settings.EMAIL_HOST_USER, [user.email])
+        msg.content_subtype = "html"
+        msg.send()
         return JsonResponse({"Success": "Account created successfully, please confirm your email"},
                             status=status.HTTP_201_CREATED)
 
@@ -69,3 +82,18 @@ class GetContactView(ListAPIView):
 
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user)
+
+
+class ConfirmEmailView(ListAPIView):
+    def get(self, request, *args, **kwargs):
+        token = self.kwargs.get('token')
+        email = self.kwargs.get('email')
+        if token and email:
+            confirm_token = ConfirmToken.objects.get(token=token, user__email = email)
+            if confirm_token:
+                confirm_token.user.is_active = True
+                confirm_token.user.save()
+                confirm_token.delete()
+                return Response({"Success": "Email confirmed successfully"}, status=status.HTTP_201_CREATED)
+            return Response({"Error": "Invalid token or email"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"Error": "Token and email are required"}, status=status.HTTP_403_FORBIDDEN)

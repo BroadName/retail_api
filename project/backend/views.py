@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from requests import get
 from rest_framework import filters, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import ListAPIView, CreateAPIView
+from rest_framework.generics import ListAPIView, CreateAPIView, DestroyAPIView, UpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,7 +11,8 @@ from rest_framework.views import APIView
 from yaml import Loader, load as load_yaml
 
 from .models import (Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem)
-from .serializers import ProductInfoSerializer, OrderSerializer
+from .serializers import (ProductInfoSerializer, OrderSerializer, ListItemsSerializer, OrderItemSerializer,
+                          ListOrderSerializer, ConfirmOrderSerializer)
 
 
 class UploadProductsView(APIView):
@@ -91,6 +92,26 @@ class ListProductView(ListAPIView):
     ordering_fields = ['model', 'product__name', 'shop__name', 'product__category__name', 'price_rrc', 'quantity']
 
 
+
+class ListItemsOrder(ListAPIView):
+    """
+    List API View for Order Items.
+
+    This view handles listing of order items for authenticated users.
+    It filters the order items based on the user making the request.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = OrderItem.objects.all()
+    serializer_class = ListItemsSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['model', 'product__name', 'shop__name', 'product__category__name']
+    ordering_fields = ['model', 'product__name', 'shop__name', 'product__category__name', 'price_rcc']
+
+    def get_queryset(self):
+        user = self.request.user
+        return OrderItem.objects.filter(order__user=user)
+
+
 class AddOrderItemView(CreateAPIView):
     """
     View for adding order items.
@@ -136,3 +157,72 @@ class AddOrderItemView(CreateAPIView):
                 product_item = OrderItem.objects.create(order=order, product=product, **item)
 
         return Response({"Success": "Item(s) added successfully"}, status=status.HTTP_201_CREATED)
+
+
+class DeleteOrderItemView(DestroyAPIView):
+    """
+    View for deleting order items.
+
+    This view handles the deletion of order items. It checks if the user is authenticated,
+    validates the incoming data, and then deletes the order item accordingly.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = OrderItem.objects.all()
+    serializer_class = OrderItemSerializer
+    lookup_field = 'id'
+
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.order.user != self.request.user:
+            return Response({'Error': 'You do not have permission to delete this item.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        self.perform_destroy(instance)
+        return Response({"Success": "Item deleted successfully"},status=status.HTTP_204_NO_CONTENT)
+
+
+class ListOrderView(ListAPIView):
+    """
+    List API View for Orders.
+
+    This view handles listing of orders for authenticated users.
+    It filters the orders based on the user making the request.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = Order.objects.all()
+    serializer_class = ListOrderSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Order.objects.filter(user=user)
+
+
+class ConfirmOrderView(UpdateAPIView):
+    """
+    View for confirming order.
+
+    This view handles the confirmation of an order. It checks if the user is authenticated,
+    validates the incoming data, and then updates the order accordingly.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = Order.objects.all()
+    serializer_class = ConfirmOrderSerializer
+    lookup_field = 'id'
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != self.request.user:
+            return Response({'Error': 'You do not have permission to confirm this order.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if instance.status == 'confirmed':
+            return Response({"Notice": "Order already confirmed"}, status=status.HTTP_400_BAD_REQUEST)
+        instance.status = 'confirmed'
+        self.perform_update(instance)
+        return Response({"Success": "Order confirmed successfully"},status=status.HTTP_200_OK)
+
+    def get_queryset(self):
+        user = self.request.user
+        return Order.objects.filter(user=user)

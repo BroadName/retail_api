@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
@@ -47,7 +49,7 @@ class CustomUser(BaseUser):
 
 
 class Contact(models.Model):
-    user = models.ForeignKey(CustomUser,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              on_delete=models.CASCADE,
                              related_name='contacts',
                              verbose_name='Пользователь')
@@ -67,3 +69,13 @@ class Contact(models.Model):
 
     def __str__(self):
         return f'{self.city}, {self.street}, {self.house}'
+
+
+class ConfirmToken(models.Model):
+    token = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tokens')
+    dt = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Токен подтверждения'
+        verbose_name_plural = 'Список токенов подтверждения'

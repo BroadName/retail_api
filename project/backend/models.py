@@ -1,4 +1,5 @@
 from django.db import models
+from rest_framework import settings
 
 from users.models import CustomUser, Contact
 
@@ -15,7 +16,7 @@ STATUS_CHOICES = (
 
 class Shop(models.Model):
     name = models.CharField(max_length=80, verbose_name='Название')
-    user = models.ForeignKey(CustomUser,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              on_delete=models.CASCADE,
                              verbose_name='Пользователь',
                              blank=True, null=True)
@@ -113,7 +114,7 @@ class ProductParameter(models.Model):
 
 
 class Order(models.Model):
-    user = models.ForeignKey(CustomUser,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              on_delete=models.CASCADE,
                              verbose_name='Пользователь',
                              related_name='orders')
@@ -135,6 +136,7 @@ class OrderItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='Продукт', blank=True)
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name='Магазин', blank=True)
     quantity = models.PositiveIntegerField(verbose_name='Количество')
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Общая стоимость')
 
     class Meta:
         verbose_name = 'Заказанная позиция'
@@ -144,3 +146,7 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f'{self.product} : {self.quantity}'
+
+    def save(self, *args, **kwargs):
+        self.total_price = self.quantity * self.product.product_info.first().price_rrc
+        super().save(*args, **kwargs)

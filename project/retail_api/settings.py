@@ -20,6 +20,12 @@ ALLOWED_HOSTS = []
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'users.backends.EmailBackend',
+]
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -101,6 +107,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+}
+
+EMAIL_HOST = os.getenv('EMAIL_HOST')
+EMAIL_PORT = os.getenv('EMAIL_PORT')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+SERVER_EMAIL = os.getenv('SERVER_EMAIL')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
