@@ -1,19 +1,21 @@
 from django.conf import settings
 from django.core.mail import EmailMessage
+from .confirm import send_email
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.filters import SearchFilter
-from rest_framework.generics import CreateAPIView, UpdateAPIView, ListAPIView
+from rest_framework.generics import CreateAPIView, UpdateAPIView, ListAPIView, DestroyAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .permissions import IsOwnerOrReadOnly
 from .models import CustomUser, Contact, ConfirmToken
 from .serializers import (CreateCustomUserSerializer, CreateContactSerializer, UpdateCustomUserSerializer,
-                          GetContactSerializer)
+                          GetContactSerializer, UpdateContactSerializer)
 
 
-class CustomUserViewSet(CreateAPIView):
+class CreateCustomUserViewSet(CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = CreateCustomUserSerializer
 
@@ -25,22 +27,13 @@ class CustomUserViewSet(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = CustomUser.objects.create_user(**serializer.validated_data)
         token = ConfirmToken.objects.create(user=user)
-
-        link = f'http://127.0.0.1:8000/api/v1/confirm_email/{token.token}/{user.email}'
-        body = f"""
-                Please confirm your email by clicking on the link:
-                <a href="{link}">Confirm your email</a>
-                """
-        msg = EmailMessage('Registration on retail site',
-                           body, settings.EMAIL_HOST_USER, [user.email])
-        msg.content_subtype = "html"
-        msg.send()
+        send_email(user.email, token.token, [user.email])
         return JsonResponse({"Success": "Account created successfully, please confirm your email"},
                             status=status.HTTP_201_CREATED)
 
 
 class UpdateCustomUserViewSet(UpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     queryset = CustomUser.objects.all()
     serializer_class = UpdateCustomUserSerializer
 
@@ -50,29 +43,24 @@ class UpdateCustomUserViewSet(UpdateAPIView):
         user = CustomUser.objects.get(id=self.request.user.id)
         if (serializer.validated_data.get('email') is not None and
                 request.user.email != serializer.validated_data.get('email')):
-            user.email = serializer.validated_data.get('email')
+            email = serializer.validated_data.get('email')
+            user.email = email
             user.is_active = False
+            token = ConfirmToken.objects.create(user=user)
+            send_email(email, token.token, [email])
         user.first_name = serializer.validated_data.get('first_name', user.first_name)
         user.last_name = serializer.validated_data.get('last_name', user.last_name)
         user.type = serializer.validated_data.get('type', user.type)
         if serializer.validated_data.get('password') is not None:
             user.set_password(serializer.validated_data.get('password', user.password))
         user.save()
-        return JsonResponse({"Success": "Profile updated successfully"}, status=status.HTTP_201_CREATED)
+        return Response({"Success": "Profile updated successfully"}, status=status.HTTP_201_CREATED)
 
 
 class CreateContactView(CreateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Contact.objects.all()
     serializer_class = CreateContactSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['user'] = self.request.user
-        return context
 
 
 class GetContactView(ListAPIView):
@@ -82,6 +70,12 @@ class GetContactView(ListAPIView):
 
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user)
+
+
+class UpdateContactView(UpdateAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    queryset = Contact.objects.all()
+    serializer_class = UpdateContactSerializer
 
 
 class ConfirmEmailView(ListAPIView):

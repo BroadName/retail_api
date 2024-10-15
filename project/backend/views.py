@@ -1,18 +1,20 @@
 from django.core.validators import URLValidator
+from django.db.models import Sum
 from django.http import JsonResponse
 from requests import get
 from rest_framework import filters, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import ListAPIView, CreateAPIView, DestroyAPIView, UpdateAPIView
+from rest_framework.generics import ListAPIView, CreateAPIView, DestroyAPIView, UpdateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from yaml import Loader, load as load_yaml
 
+from .permissions import IsOwnerOrderItem, IsOwnerOrder
 from .models import (Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem)
 from .serializers import (ProductInfoSerializer, OrderSerializer, ListItemsSerializer, OrderItemSerializer,
-                          ListOrderSerializer, ConfirmOrderSerializer)
+                          ListOrderSerializer, ConfirmOrderSerializer, GetOrderSerializer)
 
 
 class UploadProductsView(APIView):
@@ -85,7 +87,7 @@ class UploadProductsView(APIView):
 
 
 class ListProductView(ListAPIView):
-    queryset = ProductInfo.objects.select_related('product').all()
+    queryset = ProductInfo.objects.select_related('product').prefetch_related('shop', 'product__category')
     serializer_class = ProductInfoSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['model', 'product__name', 'shop__name', 'product__category__name']
@@ -109,7 +111,7 @@ class ListItemsOrder(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        return OrderItem.objects.filter(order__user=user)
+        return OrderItem.objects.filter(order__user=user, order__status='new').select_related('product')
 
 
 class AddOrderItemView(CreateAPIView):
@@ -127,7 +129,7 @@ class AddOrderItemView(CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user'] = self.request.user
-        order, created = Order.objects.get_or_create(user=user, contact=serializer.validated_data['contact'])
+        order, created = Order.objects.get_or_create(user=user, contact=serializer.validated_data['contact'], status='new')
         # an empty dict to store info about added products
         info = {}
         for item in serializer.validated_data['orderitem_set']:
@@ -158,6 +160,14 @@ class AddOrderItemView(CreateAPIView):
 
         return Response({"Success": "Item(s) added successfully"}, status=status.HTTP_201_CREATED)
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['user'] = self.request.user
+        return context
+
 
 class DeleteOrderItemView(DestroyAPIView):
     """
@@ -166,17 +176,14 @@ class DeleteOrderItemView(DestroyAPIView):
     This view handles the deletion of order items. It checks if the user is authenticated,
     validates the incoming data, and then deletes the order item accordingly.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrderItem]
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
-    lookup_field = 'id'
+    lookup_field = 'pk'
 
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.order.user != self.request.user:
-            return Response({'Error': 'You do not have permission to delete this item.'},
-                            status=status.HTTP_403_FORBIDDEN)
         self.perform_destroy(instance)
         return Response({"Success": "Item deleted successfully"},status=status.HTTP_204_NO_CONTENT)
 
@@ -198,6 +205,12 @@ class ListOrderView(ListAPIView):
         return Order.objects.filter(user=user)
 
 
+class DetailOrderView(RetrieveAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrder]
+    queryset = Order.objects.select_related('user', 'contact').prefetch_related('orderitem_set__product')
+    serializer_class = GetOrderSerializer
+
+
 class ConfirmOrderView(UpdateAPIView):
     """
     View for confirming order.
@@ -205,24 +218,24 @@ class ConfirmOrderView(UpdateAPIView):
     This view handles the confirmation of an order. It checks if the user is authenticated,
     validates the incoming data, and then updates the order accordingly.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrder]
     queryset = Order.objects.all()
     serializer_class = ConfirmOrderSerializer
     lookup_field = 'id'
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.user != self.request.user:
-            return Response({'Error': 'You do not have permission to confirm this order.'},
-                            status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
-        if instance.status == 'confirmed':
-            return Response({"Notice": "Order already confirmed"}, status=status.HTTP_400_BAD_REQUEST)
+        if instance.status in ['confirmed', 'assembled', 'sent', 'delivered', 'canceled']:
+            return Response({"Order status": f"{instance.status}"}, status=status.HTTP_403_FORBIDDEN)
         instance.status = 'confirmed'
+
+        for item in instance.orderitem_set.all():
+            product = item.product
+            product_info = product.product_info.first()
+            product_info.quantity -= item.quantity
+            product_info.save()
+
         self.perform_update(instance)
         return Response({"Success": "Order confirmed successfully"},status=status.HTTP_200_OK)
-
-    def get_queryset(self):
-        user = self.request.user
-        return Order.objects.filter(user=user)

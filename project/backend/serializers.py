@@ -1,7 +1,8 @@
 from django.db.models import Sum
 from rest_framework import serializers
 
-from .models import Order, OrderItem, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact
+
+from .models import Order, OrderItem, Shop, Product, ProductInfo, Contact
 
 
 class ShopSerializer(serializers.ModelSerializer):
@@ -22,6 +23,19 @@ class ListItemsSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = ['order','product', 'quantity', 'shop']
+
+
+class GetOrderSerializer(serializers.ModelSerializer):
+    total_sum = serializers.SerializerMethodField()
+    dt = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
+    orderitem_set = ListItemsSerializer(many=True, read_only=True)
+    class Meta:
+        model = Order
+        fields = ['id', 'status', 'dt', 'contact', 'orderitem_set', 'total_sum']
+
+    def get_total_sum(self, order):
+        total_sum = order.orderitem_set.aggregate(total_sum=Sum('total_price'))['total_sum'] or 0
+        return total_sum
 
 
 class ProductInfoSerializer(serializers.ModelSerializer):
@@ -52,6 +66,11 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['contact', 'order_items']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        user = self.context.get('user')
+        self.fields['contact'].queryset = Contact.objects.filter(user=user)
+
 
 class ListOrderSerializer(serializers.ModelSerializer):
     dt = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
@@ -63,7 +82,6 @@ class ListOrderSerializer(serializers.ModelSerializer):
     def get_total_sum(self, order):
         total_sum = order.orderitem_set.aggregate(total_sum=Sum('total_price'))['total_sum'] or 0
         return total_sum
-
 
 class ConfirmOrderSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=(('confirm', 'Подтвердить'),))

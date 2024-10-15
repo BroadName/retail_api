@@ -1,4 +1,8 @@
+from cProfile import label
+
+from django_filters.utils import verbose_field_name
 from rest_framework import serializers
+from rest_framework.fields import CurrentUserDefault
 
 from .models import CustomUser, Contact
 
@@ -21,15 +25,24 @@ class UpdateCustomUserSerializer(serializers.ModelSerializer):
 
 
 class CreateContactSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=CurrentUserDefault())
+
     class Meta:
         model = Contact
         fields = ['id', 'city', 'street', 'house', 'structure', 'building',
                   'apartment', 'user', 'phone', 'additional_desc']
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        user = self.context.get('user')
-        self.fields['user'].queryset = CustomUser.objects.filter(id=user.id)
+
+class UpdateContactSerializer(serializers.ModelSerializer):
+    city = serializers.CharField(required=False, label='Город')
+    street = serializers.CharField(required=False, label='Улица')
+    phone = serializers.CharField(required=False, label='Телефон')
+    user = serializers.HiddenField(default=CurrentUserDefault())
+
+    class Meta:
+        model = Contact
+        fields = ['id', 'city', 'street', 'house', 'structure', 'building',
+                  'apartment', 'user', 'phone', 'additional_desc']
 
 
 class GetContactSerializer(serializers.ModelSerializer):

@@ -1,13 +1,16 @@
 from django.urls import path
 
 
-from .views import CustomUserViewSet, CreateContactView, UpdateCustomUserViewSet, GetContactView
+from .views import (CreateCustomUserViewSet, CreateContactView, UpdateCustomUserViewSet, GetContactView, ConfirmEmailView,
+                    UpdateContactView)
 
 app_name = 'users'
 
 urlpatterns = [
-    path('users/', CustomUserViewSet.as_view(), name='users'),
+    path('registration/', CreateCustomUserViewSet.as_view(), name='registration'),
     path('add_contact/', CreateContactView.as_view(), name='add_contact'),
-    path('update_user/<int:pk>/', UpdateCustomUserViewSet.as_view(), name='update_user'),
+    path('update_user/', UpdateCustomUserViewSet.as_view(), name='update_user'),
     path('contacts/', GetContactView.as_view(), name='contacts'),
+    path('confirm_email/<str:token>/<str:email>/', ConfirmEmailView.as_view(), name='confirm_email'),
+    path('update_contact/<int:pk>/', UpdateContactView.as_view(), name='update_contact'),
 ]

@@ -1,7 +1,7 @@
 from django.db import models
-from rest_framework import settings
+from django.conf import settings
 
-from users.models import CustomUser, Contact
+from users.models import Contact
 
 STATUS_CHOICES = (
     ('basket', 'Статус корзины'),
@@ -80,6 +80,9 @@ class ProductInfo(models.Model):
         ordering = ('-model',)
 
 
+    def __str__(self):
+        return f'{self.product} : {self.quantity} pieces'
+
 class Parameter(models.Model):
     name = models.CharField(max_length=80, verbose_name='Название')
 
@@ -112,6 +115,8 @@ class ProductParameter(models.Model):
             models.UniqueConstraint(fields=['product_info', 'parameter'], name='unique_product_parameter'),
         ]
 
+    def __str__(self):
+        return f'{self.product_info.model} - {self.parameter.name} : {self.value}'
 
 class Order(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
@@ -128,7 +133,7 @@ class Order(models.Model):
         ordering = ('-dt',)
 
     def __str__(self):
-        return f'{self.pk} - {self.dt}'
+        return f'status: {self.status} -> {self.user}'
 
 
 class OrderItem(models.Model):
@@ -145,7 +150,7 @@ class OrderItem(models.Model):
 
 
     def __str__(self):
-        return f'{self.product} : {self.quantity}'
+        return f'{self.order} | {self.product} * {self.quantity} pieces'
 
     def save(self, *args, **kwargs):
         self.total_price = self.quantity * self.product.product_info.first().price_rrc

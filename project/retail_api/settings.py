@@ -7,9 +7,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-#zlbuo-@6(!s*1u--c0dg5=d*$&n@r5@d@q-xb-awbw!)fc0vb'
 
