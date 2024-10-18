@@ -78,6 +78,12 @@ class UpdateContactView(UpdateAPIView):
     serializer_class = UpdateContactSerializer
 
 
+class DeleteContactView(DestroyAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    queryset = Contact.objects.all()
+    serializer_class = GetContactSerializer
+
+
 class ConfirmEmailView(ListAPIView):
     def get(self, request, *args, **kwargs):
         token = self.kwargs.get('token')
