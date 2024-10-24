@@ -1,4 +1,5 @@
 from django.core.validators import URLValidator
+from django.db import IntegrityError
 from django.http import JsonResponse
 from requests import get
 from rest_framework import filters, status
@@ -56,15 +57,19 @@ class UploadProductsView(APIView):
                             category = Category.objects.get(external_id = product['category'])
                         )
 
-                        product_info_obj, created = ProductInfo.objects.get_or_create(
-                            product = product_obj,
-                            model = product['model'],
-                            external_id = product['id'],
-                            shop = shop,
-                            quantity = product['quantity'],
-                            price = product['price'],
-                            price_rrc = product['price_rrc']
-                        )
+                        try:
+                            product_info_obj, created = ProductInfo.objects.get_or_create(
+                                product = product_obj,
+                                model = product['model'],
+                                external_id = product['id'],
+                                shop = shop,
+                                quantity = product['quantity'],
+                                price = product['price'],
+                                price_rrc = product['price_rrc']
+                            )
+
+                        except IntegrityError:
+                            continue
 
                         for key, value in product['parameters'].items():
 
@@ -129,12 +134,17 @@ class AddOrderItemView(CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user'] = self.request.user
-        order, created = Order.objects.get_or_create(user=user, contact=serializer.validated_data['contact'], status='new')
+        order, created = Order.objects.get_or_create(user=user,
+                                                     contact=serializer.validated_data['contact'],
+                                                     status='new')
+
         # an empty dict to store info about added products
         info = {}
+
         for item in serializer.validated_data['orderitem_set']:
             product_id = item.get('product').get('id')
-            product = Product.objects.get(id=product_id)
+            shop_id = item.get('shop')
+            product = Product.objects.get(id=product_id, product_info__shop_id=shop_id)
             total_quantity = product.product_info.first().quantity
             item.pop('product')
             product_item = OrderItem.objects.filter(order=order, product=product).first()
@@ -246,7 +256,7 @@ class ConfirmOrderView(UpdateAPIView):
                     }
             order_info['products'][product.name] = info
             order_info['price_order'] += item.total_price
-            product_info = product.product_info.first()
+            product_info = product.product_info.filter(shop=item.shop).first()
             product_info.quantity -= item.quantity
             product_info.save()
 

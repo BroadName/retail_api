@@ -20,7 +20,7 @@ def send_confirmed_order(order_info, recipient):
     products_list = ""
 
     for product, details in order_info['products'].items():
-        products_list += f"{product} x {details['quantity']}, total price: {details['total price']}, product_id: {details['id']}\n"
+        products_list += f"{product} x {details['quantity']}, total price: {details['total price']}, product_item_id: {details['id']}\n"
 
     body_to_recipient = f"""
     <pre>
