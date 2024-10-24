@@ -1,5 +1,4 @@
 from django.core.validators import URLValidator
-from django.db.models import Sum
 from django.http import JsonResponse
 from requests import get
 from rest_framework import filters, status
@@ -11,6 +10,7 @@ from rest_framework.views import APIView
 
 from yaml import Loader, load as load_yaml
 
+from users.confirm import send_confirmed_order
 from .permissions import IsOwnerOrderItem, IsOwnerOrder
 from .models import (Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem)
 from .serializers import (ProductInfoSerializer, OrderSerializer, ListItemsSerializer, OrderItemSerializer,
@@ -230,12 +230,27 @@ class ConfirmOrderView(UpdateAPIView):
         if instance.status in ['confirmed', 'assembled', 'sent', 'delivered', 'canceled']:
             return Response({"Order status": f"{instance.status}"}, status=status.HTTP_403_FORBIDDEN)
         instance.status = 'confirmed'
-
+        order_info = {
+                        'price_order': 0,
+                        'order_id': instance.id,
+                        'user_id': instance.user.id,
+                        'user': instance.user.username,
+                        'products':{}
+                      }
         for item in instance.orderitem_set.all():
             product = item.product
+            info = {
+                    'quantity': item.quantity,
+                    'total price': item.total_price,
+                    'id': item.id
+                    }
+            order_info['products'][product.name] = info
+            order_info['price_order'] += item.total_price
             product_info = product.product_info.first()
             product_info.quantity -= item.quantity
             product_info.save()
+
+        send_confirmed_order(order_info, [request.user.email])
 
         self.perform_update(instance)
         return Response({"Success": "Order confirmed successfully"},status=status.HTTP_200_OK)
