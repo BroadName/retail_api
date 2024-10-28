@@ -6,3 +6,4 @@ project/users/__pycache__/
 project/backend/__pycache__/
 project/retail_api/__pycache__/
 *~
+static/
