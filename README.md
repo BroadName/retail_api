@@ -26,44 +26,30 @@ git clone https://github.com/BroadName/retail_api.git
 ```bash
 cd project
 ```
-Создать виртуальную среду:
+Создать Docker image с помощью команды:
 ```bash
-python -m venv venv
+docker-compose build
 ```
-Активировать виртуальную среду для Linux/Mac:
+Запустить контейнер с помощью команды:
 ```bash
-source venv/bin/activate
+docker-compose up -d
 ```
-для Windows
+Для создания супер-пользователя:
 ```bash
- venv\Scripts\activate
- ```
-Установить зависимости:
-```bash
-pip install -r requirements.txt
+docker exec -it my_container python manage.py createsuperuser
 ```
-Создать миграции:
-```bash
-python manage.py makemigrations
-```
-Выполнить миграции:
-```bash
-python manage.py migrate
-```
-Запустить сервер:
-```bash
-python manage.py runserver
-```
+Следуем инструкциям в командной строке.
+
 ### Использование
 
-Открыть веб-браузер и перейти на адрес http://localhost:8000/api/v1/.
+Открыть веб-браузер и перейти на адрес http://localhost:8000/api/v1/ или использовать Postman для API-запросов.
 Использовать API для взаимодействия с базой данных заказов.
 
 ### Примеры запросов:
 
 - Для загрузки товаров из файла необходимо отправить POST-запрос на адрес http://localhost:8000/api/v1/upload/ с прямой ссылкой на файл с товарами.
 ```
-{"url": "Прямая ссылка на файл с товарами"}
+{"url": "https://raw.githubusercontent.com/BroadName/retail_api/refs/heads/main/shop1.yaml"}
 ```
 - Добавление контактной информации к пользователю. POST-запрос на http://127.0.0.1:8000/api/v1/add_contact/
 ```

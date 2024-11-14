@@ -11,9 +11,11 @@ load_dotenv()
 SECRET_KEY = 'django-insecure-#zlbuo-@6(!s*1u--c0dg5=d*$&n@r5@d@q-xb-awbw!)fc0vb'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '*',
+]
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
@@ -24,7 +26,6 @@ AUTHENTICATION_BACKENDS = [
 
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -78,7 +79,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('POSTGRES_DB', 'retail_api'),
-        'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
         'USER': os.getenv('POSTGRES_USER', 'postgres'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'secret')
@@ -105,7 +106,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
 }
 
 EMAIL_HOST = os.getenv('EMAIL_HOST')
@@ -133,6 +135,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
