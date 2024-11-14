@@ -5,5 +5,9 @@ project/users/migrations
 project/users/__pycache__/
 project/backend/__pycache__/
 project/retail_api/__pycache__/
+project/tests/__pycache__/
+project/tests/backend/__pycache__/
+project/tests/users/__pycache__/
 *~
 static/
+/project/.coverage
