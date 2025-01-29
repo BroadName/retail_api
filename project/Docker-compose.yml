@@ -1,0 +1,102 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    hostname: db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+      interval: "10s"
+      timeout: "5s"
+      retries: 5
+    networks:
+      - app-network
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  web:
+    build: .
+    env_file:
+      - .env
+    hostname: web
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - app-network
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    command: ["sh", "-c", "python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    hostname: redis
+    networks:
+      - app-network
+
+  celery_worker:
+    build: .
+    hostname: worker
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    entrypoint: ["/app/celery_entrypoint.sh"]
+    depends_on:
+      - redis
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    networks:
+      - app-network
+
+  celery_beat:
+    build: .
+    hostname: beat
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    entrypoint: ["/app/celery_beat_entrypoint.sh"]
+    depends_on:
+      - redis
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    networks:
+      - app-network
+
+  flower:
+    build: .
+    hostname: flower
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    entrypoint: ["/app/flower_entrypoint.sh"]
+    depends_on:
+      - redis
+      - celery_worker
+      - celery_beat
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    ports:
+      - "5555:5555"
+    networks:
+      - app-network
+
+networks:
+  app-network:

@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (UploadProductsView, ListProductView, AddOrderItemView, ListItemsOrder, DeleteOrderItemView,
-                    ListOrderView, ConfirmOrderView, DetailOrderView)
+                    ListOrderView, ConfirmOrderView, DetailOrderView, TaskStatusView)
 
 app_name = 'backend'
 
@@ -13,4 +13,5 @@ urlpatterns = [
     path('delete_order_item/<int:pk>/', DeleteOrderItemView.as_view(), name='delete_order_item'),
     path('orders/', ListOrderView.as_view(), name = 'orders'),
     path('confirm/<int:id>/', ConfirmOrderView.as_view(), name='confirm'),
+    path('task_status/<str:task_id>/', TaskStatusView.as_view(), name='task_status'),
 ]

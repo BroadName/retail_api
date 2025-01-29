@@ -1,6 +1,5 @@
-from django.conf import settings
-from django.core.mail import EmailMessage
-from .confirm import send_email
+from django.core.cache import cache
+from .tasks import send_email
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
@@ -13,6 +12,10 @@ from .permissions import IsOwnerOrReadOnly
 from .models import CustomUser, Contact, ConfirmToken
 from .serializers import (CreateCustomUserSerializer, CreateContactSerializer, UpdateCustomUserSerializer,
                           GetContactSerializer, UpdateContactSerializer)
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class CreateCustomUserViewSet(CreateAPIView):
@@ -27,8 +30,10 @@ class CreateCustomUserViewSet(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = CustomUser.objects.create_user(**serializer.validated_data)
         token = ConfirmToken.objects.create(user=user)
-        send_email(user.email, token.token, [user.email])
-        return JsonResponse({"Success": "Account created successfully, please confirm your email"},
+        cache.set(f'user_email_{user.id}', user.email, timeout=300)
+        cache.set(f'token_{user.id}', token.token, timeout=300)
+        send_email.delay(user.email, token.token, [user.email])
+        return JsonResponse({"Success": "Account created successfully. The message will be sent soon, please confirm your email"},
                             status=status.HTTP_201_CREATED)
 
 
@@ -41,20 +46,24 @@ class UpdateCustomUserViewSet(UpdateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = CustomUser.objects.get(id=self.request.user.id)
+        if serializer.validated_data.get('password') is not None:
+            user.set_password(serializer.validated_data.get('password', user.password))
         if (serializer.validated_data.get('email') is not None and
                 request.user.email != serializer.validated_data.get('email')):
             email = serializer.validated_data.get('email')
-            user.email = email
-            user.is_active = False
             token = ConfirmToken.objects.create(user=user)
-            send_email(email, token.token, [email])
+            task = send_email.delay(email, token.token, [email])
+            cache.set(f'user_email_{user.id}', email, timeout=300)
+            cache.set(f'token_{user.id}', token, timeout=300)
+            logger.info(f"Email verification task started for user {user.id} with email {email}")
+
         user.first_name = serializer.validated_data.get('first_name', user.first_name)
         user.last_name = serializer.validated_data.get('last_name', user.last_name)
         user.type = serializer.validated_data.get('type', user.type)
-        if serializer.validated_data.get('password') is not None:
-            user.set_password(serializer.validated_data.get('password', user.password))
         user.save()
-        return Response({"Success": "Profile updated successfully"}, status=status.HTTP_201_CREATED)
+        return Response({"Process ID": task.id,
+                         "Processing": "We send a confirmation message to your email, it will be valid for 5 minutes"},
+                        status=status.HTTP_201_CREATED)
 
 
 class CreateContactView(CreateAPIView):
@@ -92,6 +101,7 @@ class ConfirmEmailView(ListAPIView):
             confirm_token = ConfirmToken.objects.get(token=token, user__email = email)
             if confirm_token:
                 confirm_token.user.is_active = True
+                confirm_token.user.email = email
                 confirm_token.user.save()
                 confirm_token.delete()
                 return Response({"Success": "Email confirmed successfully"}, status=status.HTTP_201_CREATED)

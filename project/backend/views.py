@@ -1,7 +1,7 @@
+from celery.result import AsyncResult
+
 from django.core.validators import URLValidator
-from django.db import IntegrityError
 from django.http import JsonResponse
-from requests import get
 from rest_framework import filters, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView, CreateAPIView, DestroyAPIView, UpdateAPIView, RetrieveAPIView
@@ -9,13 +9,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from yaml import Loader, load as load_yaml
 
-from users.confirm import send_confirmed_order
 from .permissions import IsOwnerOrderItem, IsOwnerOrder
 from .models import (Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem)
 from .serializers import (ProductInfoSerializer, OrderSerializer, ListItemsSerializer, OrderItemSerializer,
                           ListOrderSerializer, ConfirmOrderSerializer, GetOrderSerializer)
+from .tasks import upload_products, send_confirmed_order
 
 
 class UploadProductsView(APIView):
@@ -28,67 +27,17 @@ class UploadProductsView(APIView):
 
         url = request.data.get('url')
         if url:
-            validate = URLValidator()
             try:
+                validate = URLValidator()
                 validate(url)
+
             except ValidationError as er:
                 return JsonResponse({'Error': str(er)}, status=400)
 
-            else:
-                stream = get(url).content
-                data = load_yaml(stream, Loader=Loader)
+            task = upload_products.delay(request.user.id, url)
+            return JsonResponse({'Task ID': task.id}, status=202)
 
-                try:
-                    shop, created = Shop.objects.get_or_create(
-                        name=data['shop'],
-                        user_id = request.user.id
-                        )
-
-                    for category in data.get('categories'):
-                        category_obj, created = Category.objects.get_or_create(
-                            external_id=category['id'],
-                            name=category['name']
-                        )
-                        category_obj.shops.set([shop.id])
-
-                    for product in data.get('goods'):
-                        product_obj, created = Product.objects.get_or_create(
-                            name = product['name'],
-                            category = Category.objects.get(external_id = product['category'])
-                        )
-
-                        try:
-                            product_info_obj, created = ProductInfo.objects.get_or_create(
-                                product = product_obj,
-                                model = product['model'],
-                                external_id = product['id'],
-                                shop = shop,
-                                quantity = product['quantity'],
-                                price = product['price'],
-                                price_rrc = product['price_rrc']
-                            )
-
-                        except IntegrityError:
-                            continue
-
-                        for key, value in product['parameters'].items():
-
-                            parameter_obj, created = Parameter.objects.get_or_create(
-                                name = key
-                            )
-
-                            product_parameter_obj, created = ProductParameter.objects.get_or_create(
-                                product_info = product_info_obj,
-                                parameter = parameter_obj,
-                                value = value
-                            )
-
-                    return JsonResponse({'Success': 'Products uploaded.'}, status=200)
-
-                except KeyError as er:
-                    return JsonResponse({'Error': f'KeyError: {str(er)}'}, status=400)
-
-        return JsonResponse({'Error': 'You should provide a URL'}, status=400)
+        return JsonResponse({'Error': 'You should provide a direct URL to the file '}, status=400)
 
 
 class ListProductView(ListAPIView):
@@ -98,6 +47,20 @@ class ListProductView(ListAPIView):
     search_fields = ['model', 'product__name', 'shop__name', 'product__category__name']
     ordering_fields = ['model', 'product__name', 'shop__name', 'product__category__name', 'price_rrc', 'quantity']
 
+
+class TaskStatusView(APIView):
+    """
+    Retrieves the status of an asynchronous task.
+
+    Args:
+        task_id (str): The unique identifier of the task.
+
+    Returns:
+        JsonResponse: A response containing the status of the task.
+    """
+    def get(self, request, task_id, *args, **kwargs):
+        task_result = AsyncResult(task_id)
+        return JsonResponse({'Status': task_result.status})
 
 
 class ListItemsOrder(ListAPIView):
@@ -260,7 +223,6 @@ class ConfirmOrderView(UpdateAPIView):
             product_info.quantity -= item.quantity
             product_info.save()
 
-        send_confirmed_order(order_info, [request.user.email])
-
+        task = send_confirmed_order.delay(order_info, [request.user.email])
         self.perform_update(instance)
-        return Response({"Success": "Order confirmed successfully"},status=status.HTTP_200_OK)
+        return Response({"Process ID": task.id, "Processing": "We are processing your order"}, status=status.HTTP_200_OK)

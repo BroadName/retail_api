@@ -11,3 +11,7 @@ project/tests/users/__pycache__/
 *~
 static/
 /project/.coverage
+project/pytest-cache-files-a16qccos/
+project/retail_api/celerybeat-schedule
+recreate_db.bat
+pytest-cache-files-0z1lbohr/
